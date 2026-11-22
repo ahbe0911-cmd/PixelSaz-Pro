@@ -227,7 +227,7 @@ class _IdPhotoCameraPageState extends State<IdPhotoCameraPage>
                         fit: StackFit.expand,
                         children: <Widget>[
                           if (cameraReady)
-                            CameraPreview(controller!)
+                            CameraPreview(controller)
                           else
                             Container(
                               color: const Color(0xFF151D2D),
