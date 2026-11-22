@@ -135,9 +135,10 @@ class _IdPhotoResultPageState extends ConsumerState<IdPhotoResultPage> {
                 children: <Widget>[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: AspectRatio(
-                      aspectRatio: 3 / 4,
-                      child: Image.file(File(outputPath), fit: BoxFit.cover),
+                    child: SizedBox(
+                      height: 218,
+                      width: 164,
+                      child: Image.file(File(outputPath), cacheWidth: 328, fit: BoxFit.cover),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -202,23 +203,46 @@ class _IdPhotoResultPageState extends ConsumerState<IdPhotoResultPage> {
               'پسوند JPG به‌صورت خودکار اضافه می‌شود.',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
-            const SizedBox(height: 22),
-            ElevatedButton.icon(
-              onPressed: _busy ? null : _save,
-              icon: _saving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Icon(_saved ? Icons.check_circle_rounded : Icons.save_alt_rounded),
-              label: Text(_saving ? 'در حال ذخیره...' : _saved ? 'ذخیره‌شده در گالری' : 'ذخیره در گالری'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _share,
-              icon: _sharing
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.share_rounded),
-              label: Text(_sharing ? 'در حال آماده‌سازی...' : 'اشتراک‌گذاری مستقیم'),
-            ),
           ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 688),
+            child: SizedBox(
+              height: 52,
+              child: Row(
+                textDirection: TextDirection.rtl,
+                children: <Widget>[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _save,
+                      icon: _saving
+                          ? const SizedBox(width: 17, height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Icon(_saved ? Icons.check_circle_rounded : Icons.save_alt_rounded),
+                      label: Text(_saving ? 'در حال ذخیره...' : _saved ? 'ذخیره شد' : 'ذخیره در گالری'),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _share,
+                      icon: _sharing
+                          ? const SizedBox(width: 17, height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.share_rounded),
+                      label: const Text('اشتراک‌گذاری'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -278,7 +302,7 @@ class _SizeComparison extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_rounded, color: Colors.green),
+          const Icon(Icons.arrow_back_rounded, color: Colors.green),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
