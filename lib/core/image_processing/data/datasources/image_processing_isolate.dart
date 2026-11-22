@@ -487,7 +487,7 @@ _QualityChoice _searchQuality({
       }
     }
     return _QualityChoice(
-      bytes: bestBytes,
+      bytes: bestBytes!,
       quality: bestQuality,
       targetReached: true,
     );
