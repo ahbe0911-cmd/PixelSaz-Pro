@@ -34,7 +34,9 @@ jobs:
         run: flutter --version
 
       - name: Generate platform host project
-        run: flutter create --project-name pixelsaz_pro --org com.pixelsaz --platforms=android .
+        run: |
+          flutter create --project-name pixelsaz_pro --org com.pixelsaz --platforms=android .
+          rm -f test/widget_test.dart
 
       - name: Upgrade Android Gradle and minSdk
         shell: bash
