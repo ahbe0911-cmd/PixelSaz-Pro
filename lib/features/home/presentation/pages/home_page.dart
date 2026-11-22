@@ -4,12 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_constants.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_mode_controller.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../../batch_converter/presentation/providers/batch_conversion_providers.dart';
 
-const _ink = Color(0xFF17243B);
 const _navy = Color(0xFF101D3C);
 const _electric = Color(0xFF3976FF);
 
