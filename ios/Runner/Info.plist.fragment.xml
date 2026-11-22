@@ -1,0 +1,9 @@
+<!-- Merge these keys into the root <dict> of ios/Runner/Info.plist. -->
+<key>CFBundleDisplayName</key>
+<string>پیکسل‌ساز پرو</string>
+<key>NSCameraUsageDescription</key>
+<string>برای ثبت عکس پرسنلی استاندارد به دوربین نیاز داریم.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>برای انتخاب تصاویر موردنظر جهت تبدیل و فشرده‌سازی به کتابخانه تصاویر نیاز داریم.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>برای ذخیره تصاویر خروجی در گالری به اجازه شما نیاز داریم.</string>
