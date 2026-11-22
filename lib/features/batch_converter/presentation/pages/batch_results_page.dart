@@ -229,64 +229,58 @@ class _BatchResultsPageState extends ConsumerState<BatchResultsPage> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 12),
-                      _ExportActionsCard(
-                        enabled: !_isExporting && successfulItems.isNotEmpty,
-                        isSaving: _operation == _ExportOperation.saving,
-                        isSharing: _operation == _ExportOperation.sharing,
-                        onSaveAll: () => _saveItems(successfulItems),
-                        onShareAll: () => _shareItems(successfulItems),
-                      ),
-                      const SizedBox(height: 15),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.oceanBlue.withAlpha(12),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: AppColors.oceanBlue.withAlpha(35),
-                          ),
-                        ),
-                        child: Row(
-                          textDirection: TextDirection.rtl,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            const Icon(
-                              Icons.verified_user_outlined,
-                              color: AppColors.oceanBlue,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'نام فایل پیش از ذخیره و اشتراک‌گذاری اعمال می‌شود. '
-                                'پسوند JPG خودکار اضافه خواهد شد و فایل اصلی پردازش‌شده تغییر نمی‌کند.',
-                                textDirection: TextDirection.rtl,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  height: 1.8,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      OutlinedButton.icon(
-                        onPressed: _isExporting
-                            ? null
-                            : () {
-                                ref.read(batchConversionControllerProvider.notifier)
-                                    .clearSelection();
-                                context.go('/batch');
-                              },
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('پردازش تصاویر دیگر'),
-                      ),
+                      const SizedBox(height: 16),
                     ],
                   )
                 : _EmptyResults(onBack: () => context.go('/batch')),
           ),
         ),
       ),
+      bottomNavigationBar: state.hasResults
+          ? SafeArea(
+              top: false,
+              minimum: const EdgeInsets.fromLTRB(16, 7, 16, 11),
+              child: Center(
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 728),
+                  child: SizedBox(
+                    height: 52,
+                    child: Row(
+                      textDirection: TextDirection.rtl,
+                      children: <Widget>[
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _isExporting || successfulItems.isEmpty
+                                ? null
+                                : () => _saveItems(successfulItems),
+                            icon: _operation == _ExportOperation.saving
+                                ? const SizedBox(width: 17, height: 17,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.save_alt_rounded),
+                            label: const Text('ذخیره همه'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isExporting || successfulItems.isEmpty
+                                ? null
+                                : () => _shareItems(successfulItems),
+                            icon: _operation == _ExportOperation.sharing
+                                ? const SizedBox(width: 17, height: 17,
+                                    child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.share_rounded),
+                            label: const Text('اشتراک‌گذاری'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -307,9 +301,9 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(19),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
@@ -341,7 +335,7 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 17),
+          const SizedBox(height: 9),
           Row(
             textDirection: TextDirection.rtl,
             children: <Widget>[
@@ -350,7 +344,7 @@ class _SummaryCard extends StatelessWidget {
               Expanded(child: _SummaryMetric(value: total, label: 'کل تصاویر', icon: Icons.photo_library_outlined)),
             ],
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 9),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
             decoration: BoxDecoration(
@@ -679,71 +673,6 @@ class _ResultImageCardState extends State<_ResultImageCard> {
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExportActionsCard extends StatelessWidget {
-  const _ExportActionsCard({
-    required this.enabled,
-    required this.isSaving,
-    required this.isSharing,
-    required this.onSaveAll,
-    required this.onShareAll,
-  });
-
-  final bool enabled;
-  final bool isSaving;
-  final bool isSharing;
-  final VoidCallback onSaveAll;
-  final VoidCallback onShareAll;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(
-            'خروجی نهایی',
-            textDirection: TextDirection.rtl,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 11),
-          FilledButton.icon(
-            onPressed: enabled ? onSaveAll : null,
-            icon: isSaving
-                ? const SizedBox(
-                    width: 17,
-                    height: 17,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.photo_library_outlined),
-            label: Text(isSaving ? 'در حال ذخیره...' : 'ذخیره همه در گالری'),
-          ),
-          const SizedBox(height: 9),
-          OutlinedButton.icon(
-            onPressed: enabled ? onShareAll : null,
-            icon: isSharing
-                ? const SizedBox(
-                    width: 17,
-                    height: 17,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.ios_share_rounded),
-            label: Text(
-              isSharing ? 'در حال آماده‌سازی اشتراک...' : 'اشتراک‌گذاری همه تصاویر',
             ),
           ),
         ],
