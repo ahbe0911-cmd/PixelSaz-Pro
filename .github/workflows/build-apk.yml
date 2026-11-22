@@ -46,8 +46,8 @@ jobs:
           import re
           app = Path('android/app/build.gradle.kts')
           source = app.read_text()
-          source = re.sub(r'minSdk\\s*=\\s*flutter\\.minSdkVersion', 'minSdk = 24', source)
-          source = re.sub(r'minSdk\\s*=\\s*\\d+', 'minSdk = 24', source)
+          source = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24', source)
+          source = re.sub(r'minSdk\s*=\s*\d+', 'minSdk = 24', source)
           app.write_text(source)
           PY
 
