@@ -48,6 +48,8 @@ jobs:
           source = app.read_text()
           source = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24', source)
           source = re.sub(r'minSdk\s*=\s*\d+', 'minSdk = 24', source)
+          source = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 37', source)
+          source = re.sub(r'compileSdk\s*=\s*\d+', 'compileSdk = 37', source)
           app.write_text(source)
           PY
 
