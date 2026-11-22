@@ -528,7 +528,7 @@ class _QueueImageTile extends StatelessWidget {
               child: Image.file(
                 File(item.path),
                 fit: BoxFit.cover,
-                cacheWidth: 120,
+                cacheWidth: 200,
                 cacheHeight: 120,
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: theme.colorScheme.surfaceContainerHighest,
