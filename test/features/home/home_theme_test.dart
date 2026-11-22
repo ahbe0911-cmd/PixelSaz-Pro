@@ -7,8 +7,8 @@ import 'package:pixelsaz_pro/features/home/presentation/pages/home_page.dart';
 
 void main() {
   test('both themes use offline Vazirmatn and the correct palette', () {
-    expect(AppTheme.light.fontFamily, 'Vazirmatn');
-    expect(AppTheme.dark.fontFamily, 'Vazirmatn');
+    expect(AppTheme.fontFamily, 'Vazirmatn');
+    expect(AppTheme.dark.textTheme.bodyLarge?.fontFamily, 'Vazirmatn');
     expect(AppTheme.light.textTheme.bodyMedium?.fontFamily, 'Vazirmatn');
     expect(AppTheme.dark.textTheme.titleLarge?.fontFamily, 'Vazirmatn');
     expect(AppTheme.light.scaffoldBackgroundColor, AppColors.lightBackground);
