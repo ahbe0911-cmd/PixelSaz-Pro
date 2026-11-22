@@ -228,11 +228,18 @@ class _SectionLabel extends StatelessWidget {
       height: 23,
       child: Row(
         children: <Widget>[
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontSize: 15),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+              ),
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           if (action != null && onAction != null)
             TextButton(
               onPressed: onAction,
