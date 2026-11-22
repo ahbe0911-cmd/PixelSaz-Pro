@@ -138,131 +138,151 @@ class BatchConversionController extends Notifier<BatchConversionState> {
     state = state.copyWith(isCancelling: true);
   }
 
+  /// Bounded native conversion queue. A failing file never aborts other files.
   Future<void> processBatch() async {
     if (!state.canStart) return;
-
     _cancelRequested = false;
-    final batchItems = List<BatchImageItem>.from(state.items);
-    final batchId = const Uuid().v4();
+    final items = List<BatchImageItem>.from(state.items);
+    final targetBytes = state.targetBytes;
+    final maxWorkers = Platform.numberOfProcessors >= 8 && items.length >= 8 ? 3 : 2;
+    final runningProgress = <String, double>{};
+    var next = 0;
+    var finished = 0;
 
     state = state.copyWith(
+      items: items.map((item) => item.copyWith(
+        status: BatchImageStatus.selected,
+        stage: 'منتظر پردازش',
+        progress: 0,
+        clearError: true,
+        clearOutput: true,
+      )).toList(growable: false),
       isProcessing: true,
       isCancelling: false,
       overallProgress: 0,
       completedCount: 0,
-      clearError: true,
       clearSessionDirectory: true,
+      clearError: true,
     );
 
+    double overall() {
+      var amount = finished.toDouble();
+      for (final progress in runningProgress.values) {
+        amount += progress;
+      }
+      return (amount / items.length).clamp(0.0, 1.0).toDouble();
+    }
+
     try {
-      final supportDirectory = await getApplicationSupportDirectory();
-      final outputDirectory = Directory(
-        '${supportDirectory.path}${Platform.pathSeparator}'
-        'pixelsaz_pro${Platform.pathSeparator}converted${Platform.pathSeparator}$batchId',
+      final support = await getApplicationSupportDirectory();
+      final directory = Directory(
+        '${support.path}${Platform.pathSeparator}'
+        'pixelsaz_pro${Platform.pathSeparator}converted${Platform.pathSeparator}'
+        '${const Uuid().v4()}',
       );
-      await outputDirectory.create(recursive: true);
-      state = state.copyWith(sessionDirectory: outputDirectory.path);
+      await directory.create(recursive: true);
+      state = state.copyWith(sessionDirectory: directory.path);
 
-      for (var index = 0; index < batchItems.length; index++) {
-        if (_cancelRequested) break;
-
-        final queuedItem = batchItems[index];
-        _replaceItem(
-          queuedItem.id,
-          queuedItem.copyWith(
+      Future<void> runOne(BatchImageItem item) async {
+        runningProgress[item.id] = 0;
+        final start = _findItem(item.id);
+        if (start != null) {
+          _replaceItem(item.id, start.copyWith(
             status: BatchImageStatus.processing,
             progress: 0,
-            stage: 'آماده‌سازی تصویر',
+            stage: 'پردازش نیتیو تصویر',
             clearError: true,
             clearOutput: true,
-          ),
-        );
-
+          ));
+        }
         try {
           final result = await _processingService.compressToJpeg(
-            inputPath: queuedItem.path,
-            options: ImageCompressionOptions(targetBytes: state.targetBytes),
+            inputPath: item.path,
+            options: ImageCompressionOptions(targetBytes: targetBytes),
             onProgress: (ImageProcessingProgress progress) {
-              final current = _findItem(queuedItem.id);
+              final current = _findItem(item.id);
               if (current == null) return;
-              _replaceItem(
-                queuedItem.id,
-                current.copyWith(
-                  progress: progress.fraction,
-                  stage: _stageLabel(progress.stage),
-                ),
-              );
-              state = state.copyWith(
-                overallProgress: (index + progress.fraction) / batchItems.length,
-              );
+              runningProgress[item.id] = progress.fraction.clamp(0.0, 1.0).toDouble();
+              _replaceItem(item.id, current.copyWith(
+                progress: progress.fraction,
+                stage: _stageLabel(progress.stage),
+              ));
+              state = state.copyWith(overallProgress: overall());
             },
           );
-
-          final outputFile = File(
-            '${outputDirectory.path}${Platform.pathSeparator}${queuedItem.id}.jpg',
+          final output = File(
+            '${directory.path}${Platform.pathSeparator}${item.id}.jpg',
           );
-          await outputFile.writeAsBytes(result.bytes, flush: true);
-
-          final current = _findItem(queuedItem.id);
+          await output.writeAsBytes(result.bytes, flush: false);
+          final current = _findItem(item.id);
           if (current != null) {
-            _replaceItem(
-              queuedItem.id,
-              current.copyWith(
-                status: BatchImageStatus.completed,
-                progress: 1,
-                stage: 'آماده خروجی',
-                outputPath: outputFile.path,
-                outputSizeBytes: result.outputSizeBytes,
-                outputWidth: result.width,
-                outputHeight: result.height,
-                quality: result.quality,
-                resizeCount: result.resizeCount,
-                targetReached: result.targetReached,
-                sourceFormat: result.sourceFormat,
-                clearError: true,
-              ),
-            );
+            _replaceItem(item.id, current.copyWith(
+              status: BatchImageStatus.completed,
+              progress: 1,
+              stage: 'آماده خروجی',
+              outputPath: output.path,
+              outputSizeBytes: result.outputSizeBytes,
+              outputWidth: result.width,
+              outputHeight: result.height,
+              quality: result.quality,
+              resizeCount: result.resizeCount,
+              targetReached: result.targetReached,
+              sourceFormat: result.sourceFormat,
+              clearError: true,
+            ));
           }
         } catch (error) {
-          final current = _findItem(queuedItem.id);
+          final current = _findItem(item.id);
           if (current != null) {
-            _replaceItem(
-              queuedItem.id,
-              current.copyWith(
-                status: BatchImageStatus.failed,
-                progress: 0,
-                stage: 'پردازش ناموفق',
-                errorMessage: _processingErrorMessage(error),
-              ),
-            );
+            _replaceItem(item.id, current.copyWith(
+              status: BatchImageStatus.failed,
+              stage: 'پردازش ناموفق',
+              progress: 0,
+              errorMessage: _processingErrorMessage(error),
+            ));
           }
+        } finally {
+          runningProgress.remove(item.id);
+          finished++;
+          state = state.copyWith(
+            completedCount: finished,
+            overallProgress: overall(),
+          );
         }
-
-        state = state.copyWith(
-          completedCount: index + 1,
-          overallProgress: (index + 1) / batchItems.length,
-        );
       }
 
-      final stoppedEarly = _cancelRequested;
+      Future<void> worker() async {
+        while (!_cancelRequested) {
+          final index = next++;
+          if (index >= items.length) break;
+          await runOne(items[index]);
+        }
+      }
+
+      await Future.wait<void>(
+        List<Future<void>>.generate(
+          maxWorkers < items.length ? maxWorkers : items.length,
+          (_) => worker(),
+          growable: false,
+        ),
+      );
+      final cancelled = _cancelRequested;
       state = state.copyWith(
         isProcessing: false,
         isCancelling: false,
-        overallProgress: stoppedEarly
-            ? state.overallProgress
-            : 1,
-        errorMessage: stoppedEarly
-            ? 'صف پردازش پس از پایان تصویر جاری متوقف شد.'
+        overallProgress: cancelled ? overall() : 1,
+        errorMessage: cancelled
+            ? 'پردازش تصاویر منتظر متوقف شد و خروجی‌های آماده محفوظ هستند.'
             : state.failedCount > 0
-                ? '${state.failedCount} تصویر با خطا مواجه شد؛ سایر تصاویر پردازش شدند.'
+                ? '${state.failedCount} فایل خراب بود؛ سایر تصاویر پردازش شدند.'
                 : null,
-        clearError: !stoppedEarly && state.failedCount == 0,
+        clearError: !cancelled && state.failedCount == 0,
       );
     } catch (error) {
       state = state.copyWith(
         isProcessing: false,
         isCancelling: false,
-        errorMessage: 'ایجاد فضای خروجی یا شروع پردازش ناموفق بود: $error',
+        errorMessage: 'آماده‌سازی فضای خروجی ناموفق بود: $error',
       );
     } finally {
       _cancelRequested = false;
@@ -294,6 +314,7 @@ class BatchConversionController extends Notifier<BatchConversionState> {
         return 'رمزگشایی تصویر';
       case 'preparing':
         return 'آماده‌سازی تصویر';
+      case 'finalizing':
       case 'compressing':
       case 'searching_quality':
         return 'بهینه‌سازی کیفیت و حجم';

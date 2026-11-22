@@ -1,7 +1,7 @@
 name: pixelsaz_pro
 description: PixelSaz Pro - professional image converter, compressor and ID photo studio.
 publish_to: none
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -13,25 +13,28 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # App architecture and navigation
+  # Application architecture
   flutter_riverpod: ^3.5.0
   go_router: ^18.1.4
 
-  # Image selection, capture, crop and conversion
+  # Native image codec and capture/crop
+  flutter_image_compress: ^2.5.1
   image_picker: ^1.2.4
   camera: ^0.12.2
   image_cropper: ^14.0.0
   heif_converter: ^1.0.7
+
+  # Only retained for fine-angle photo rotation and test fixtures,
+  # never used by the batch compression engine.
   image: ^4.13.1
 
-  # Files, gallery and sharing
   cross_file: ^0.3.5+5
   path_provider: ^2.1.6
   gal: ^3.0.1
   share_plus: ^13.3.1
   permission_handler: ^13.0.2
 
-  # UI, typography, localization and settings
+  # UI visual redesign is scheduled for phase 2; local fonts are ready now.
   google_fonts: ^8.2.1
   flutter_svg: ^2.5.0
   flutter_animate: ^4.5.2
@@ -48,3 +51,14 @@ flutter:
   uses-material-design: true
   assets:
     - assets/branding/pixelsaz_icon.jpg
+  fonts:
+    - family: Vazirmatn
+      fonts:
+        - asset: assets/fonts/Vazirmatn-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Vazirmatn-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Vazirmatn-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Vazirmatn-ExtraBold.ttf
+          weight: 800

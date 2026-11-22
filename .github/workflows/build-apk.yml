@@ -53,6 +53,9 @@ jobs:
           app.write_text(source)
           PY
 
+      - name: Download and verify offline Vazirmatn fonts
+        run: python3 tool/fetch_local_fonts.py
+
       - name: Resolve dependencies
         run: flutter pub get
 
