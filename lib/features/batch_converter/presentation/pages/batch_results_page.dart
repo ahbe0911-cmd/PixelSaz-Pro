@@ -12,7 +12,7 @@ import '../../../export/presentation/providers/image_export_provider.dart';
 import '../../domain/entities/batch_image_item.dart';
 import '../providers/batch_conversion_providers.dart';
 
-enum _ExportOperation { none, saving, sharing }
+enum _ExportOperation { none, saving, sharing, zipping }
 
 class BatchResultsPage extends ConsumerStatefulWidget {
   const BatchResultsPage({super.key});
@@ -101,6 +101,37 @@ class _BatchResultsPageState extends ConsumerState<BatchResultsPage> {
         case ShareResultStatus.unavailable:
           _showMessage('پنجره اشتراک‌گذاری باز شد؛ وضعیت مقصد قابل تشخیص نیست.');
           break;
+      }
+    } catch (error) {
+      if (mounted) _showMessage(_readableError(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _operation = _ExportOperation.none);
+    }
+  }
+
+  Future<void> _shareZipItems(List<BatchImageItem> items) async {
+    if (_isExporting || items.isEmpty) return;
+    setState(() => _operation = _ExportOperation.zipping);
+    try {
+      final outcome = await ref
+          .read(zipExportServiceProvider)
+          .shareZip(items);
+      if (!mounted) return;
+      if (outcome.openedBale) {
+        _showMessage('فایل ZIP در بله باز شد؛ گفت‌وگوی مقصد را انتخاب کنید.');
+      } else {
+        switch (outcome.shareResult?.status) {
+          case ShareResultStatus.success:
+            _showMessage('فایل ZIP برای اشتراک‌گذاری آماده و ارسال شد.');
+            break;
+          case ShareResultStatus.dismissed:
+            _showMessage('پنجره اشتراک‌گذاری ZIP بسته شد.');
+            break;
+          case ShareResultStatus.unavailable:
+          case null:
+            _showMessage('فایل ZIP آماده است؛ وضعیت ارسال در برنامه مقصد نامشخص است.');
+            break;
+        }
       }
     } catch (error) {
       if (mounted) _showMessage(_readableError(error), isError: true);
@@ -244,38 +275,59 @@ class _BatchResultsPageState extends ConsumerState<BatchResultsPage> {
                 heightFactor: 1,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 728),
-                  child: SizedBox(
-                    height: 52,
-                    child: Row(
-                      textDirection: TextDirection.rtl,
-                      children: <Widget>[
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _isExporting || successfulItems.isEmpty
-                                ? null
-                                : () => _saveItems(successfulItems),
-                            icon: _operation == _ExportOperation.saving
-                                ? const SizedBox(width: 17, height: 17,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.save_alt_rounded),
-                            label: const Text('ذخیره همه'),
-                          ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      SizedBox(
+                        height: 52,
+                        child: Row(
+                          textDirection: TextDirection.rtl,
+                          children: <Widget>[
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: _isExporting || successfulItems.isEmpty
+                                    ? null
+                                    : () => _saveItems(successfulItems),
+                                icon: _operation == _ExportOperation.saving
+                                    ? const SizedBox(width: 17, height: 17,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.save_alt_rounded),
+                                label: const Text('ذخیره همه'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _isExporting || successfulItems.isEmpty
+                                    ? null
+                                    : () => _shareItems(successfulItems),
+                                icon: _operation == _ExportOperation.sharing
+                                    ? const SizedBox(width: 17, height: 17,
+                                        child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.share_rounded),
+                                label: const Text('اشتراک‌گذاری'),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _isExporting || successfulItems.isEmpty
-                                ? null
-                                : () => _shareItems(successfulItems),
-                            icon: _operation == _ExportOperation.sharing
-                                ? const SizedBox(width: 17, height: 17,
-                                    child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.share_rounded),
-                            label: const Text('اشتراک‌گذاری'),
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: OutlinedButton.icon(
+                          onPressed: _isExporting || successfulItems.isEmpty
+                              ? null
+                              : () => _shareZipItems(successfulItems),
+                          icon: _operation == _ExportOperation.zipping
+                              ? const SizedBox(
+                                  width: 17, height: 17,
+                                  child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.archive_outlined, size: 19),
+                          label: const Text('اشتراک‌گذاری فایل ZIP در بله'),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
