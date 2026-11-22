@@ -38,29 +38,17 @@ jobs:
           flutter create --project-name pixelsaz_pro --org com.pixelsaz --platforms=android .
           rm -f test/widget_test.dart
 
-      - name: Upgrade Android Gradle and minSdk
+      - name: Configure Android minSdk without downgrading Gradle
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-          settings=Path('android/settings.gradle.kts')
-          if settings.exists():
-              s=settings.read_text()
-              s=re.sub(r'id\("com.android.application"\) version "[^"]+"', 'id("com.android.application") version "8.12.1"', s)
-              s=re.sub(r'id\("org.jetbrains.kotlin.android"\) version "[^"]+"', 'id("org.jetbrains.kotlin.android") version "2.2.0"', s)
-              settings.write_text(s)
-          gradle=Path('android/gradle/wrapper/gradle-wrapper.properties')
-          if gradle.exists():
-              s=gradle.read_text()
-              s=re.sub(r'gradle-[0-9.]+-(?:all|bin)\.zip', 'gradle-8.13-all.zip', s)
-              gradle.write_text(s)
-          app=Path('android/app/build.gradle.kts')
-          if app.exists():
-              s=app.read_text()
-              s=re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24', s)
-              s=re.sub(r'minSdk\s*=\s*\d+', 'minSdk = 24', s)
-              app.write_text(s)
+          app = Path('android/app/build.gradle.kts')
+          source = app.read_text()
+          source = re.sub(r'minSdk\\s*=\\s*flutter\\.minSdkVersion', 'minSdk = 24', source)
+          source = re.sub(r'minSdk\\s*=\\s*\\d+', 'minSdk = 24', source)
+          app.write_text(source)
           PY
 
       - name: Resolve dependencies
