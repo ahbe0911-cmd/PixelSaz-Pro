@@ -40,15 +40,19 @@ class ZipShareOutcome {
 }
 
 class ZipExportService {
-  ZipExportService({MethodChannel? baleChannel})
-      : _baleChannel = baleChannel ??
-            const MethodChannel('pixelsaz_pro/zip_share');
+  ZipExportService({
+    MethodChannel? baleChannel,
+    Future<Directory> Function()? temporaryDirectoryProvider,
+  }) : _baleChannel = baleChannel ??
+            const MethodChannel('pixelsaz_pro/zip_share'),
+       _getTemporaryDirectory = temporaryDirectoryProvider ?? getTemporaryDirectory;
 
   static const Uuid _uuid = Uuid();
   static const String _cacheRoot = 'pixelsaz_pro';
   static const Duration _cacheRetention = Duration(days: 2);
 
   final MethodChannel _baleChannel;
+  final Future<Directory> Function() _getTemporaryDirectory;
 
   /// Creates one ZIP from successfully converted images using their chosen
   /// export names. JPEGs are stored without lossy re-encoding or extra deflate.
@@ -78,7 +82,7 @@ class ZipExportService {
       inputs.add(ZipInputFile(file.path, fileNames[index]));
     }
 
-    final temporary = await getTemporaryDirectory();
+    final temporary = await _getTemporaryDirectory();
     final appCache = Directory(
       temporary.path + Platform.pathSeparator + _cacheRoot,
     );

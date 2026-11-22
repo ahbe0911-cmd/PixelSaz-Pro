@@ -1,5 +1,9 @@
 package com.pixelsaz.pixelsaz_pro
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.Intent
+import androidx.core.content.FileProvider
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -52,6 +56,60 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pixelsaz_pro/zip_share")
+            .setMethodCallHandler { call, reply ->
+                if (call.method != "shareToBale") {
+                    reply.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val arguments = call.arguments as? Map<*, *>
+                if (arguments == null) {
+                    reply.error("invalid_arguments", "Expected ZIP path arguments.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    reply.success(shareZipToBale(arguments))
+                } catch (error: Exception) {
+                    reply.error("zip_share_failed", error.message ?: "Unable to share ZIP", null)
+                }
+            }
+    }
+
+    /**
+     * Open Bale directly when it handles application/zip. The Dart caller
+     * falls back to the system share sheet when Bale is missing.
+     */
+    private fun shareZipToBale(arguments: Map<*, *>): Boolean {
+        val requestedPath = arguments["zipPath"] as? String
+            ?: throw IllegalArgumentException("Missing ZIP path")
+        val root = File(cacheDir, "pixelsaz_pro").canonicalFile
+        val archive = File(requestedPath).canonicalFile
+        if (!archive.path.startsWith(root.path + File.separator)) {
+            throw SecurityException("Only generated ZIP cache entries may be shared")
+        }
+        if (!archive.isFile || !archive.name.endsWith(".zip", ignoreCase = true) ||
+            archive.length() <= 0L) {
+            throw IllegalArgumentException("Generated ZIP is missing or empty")
+        }
+        val uri = FileProvider.getUriForFile(
+            this, applicationContext.packageName + ".zip_share_provider", archive
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri(archive.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setPackage("ir.nasim")
+        }
+        return try {
+            startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     override fun onDestroy() {
