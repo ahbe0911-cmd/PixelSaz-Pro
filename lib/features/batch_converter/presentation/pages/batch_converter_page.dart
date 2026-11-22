@@ -9,8 +9,11 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../domain/entities/batch_image_item.dart';
+import '../controllers/batch_conversion_state.dart';
 import '../providers/batch_conversion_providers.dart';
 
+/// Fixed action bar, one-line target presets, and lazily built list. The image
+/// selection is the primary content rather than an oversized marketing banner.
 class BatchConverterPage extends ConsumerStatefulWidget {
   const BatchConverterPage({super.key});
 
@@ -19,30 +22,63 @@ class BatchConverterPage extends ConsumerStatefulWidget {
 }
 
 class _BatchConverterPageState extends ConsumerState<BatchConverterPage> {
-  static const List<int> _presetTargets = <int>[
-    200 * 1024,
-    300 * 1024,
-    495 * 1024,
-    1024 * 1024,
-  ];
+  static const _presets = <int>[200 * 1024, 300 * 1024, 495 * 1024, 1024 * 1024];
 
-  Future<void> _startProcessing() async {
-    final controller = ref.read(batchConversionControllerProvider.notifier);
-    await controller.processBatch();
+  Future<void> _run() async {
+    HapticFeedback.lightImpact();
+    await ref.read(batchConversionControllerProvider.notifier).processBatch();
     if (!mounted) return;
-    final state = ref.read(batchConversionControllerProvider);
-    if (state.hasResults) {
-      context.push('/batch/results');
-    }
+    final updated = ref.read(batchConversionControllerProvider);
+    if (updated.hasResults) context.push('/batch/results');
   }
 
-  Future<void> _chooseCustomTarget(int currentBytes) async {
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) => _CustomTargetDialog(currentBytes: currentBytes),
-    );
-    if (result != null && mounted) {
-      ref.read(batchConversionControllerProvider.notifier).setTargetBytes(result);
+  Future<void> _setCustomTarget(int current) async {
+    final kb = TextEditingController(text: (current / 1024).round().toString());
+    final formKey = GlobalKey<FormState>();
+    try {
+      final size = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('حجم دلخواه خروجی'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: kb,
+              autofocus: true,
+              textDirection: TextDirection.ltr,
+              keyboardType: TextInputType.number,
+              inputFormatters: <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'کیلوبایت',
+                prefixIcon: Icon(Icons.tune_rounded),
+              ),
+              validator: (value) {
+                final n = int.tryParse(value ?? '');
+                if (n == null || n < 20 || n > 102400) {
+                  return 'بین ۲۰ تا ۱۰۲۴۰۰ کیلوبایت انتخاب کنید.';
+                }
+                return null;
+              },
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(dialogContext, int.parse(kb.text) * 1024);
+                }
+              },
+              child: const Text('تأیید'),
+            ),
+          ],
+        ),
+      );
+      if (mounted && size != null) {
+        ref.read(batchConversionControllerProvider.notifier).setTargetBytes(size);
+      }
+    } finally {
+      kb.dispose();
     }
   }
 
@@ -50,673 +86,416 @@ class _BatchConverterPageState extends ConsumerState<BatchConverterPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(batchConversionControllerProvider);
     final controller = ref.read(batchConversionControllerProvider.notifier);
-    final theme = Theme.of(context);
-    final muted = theme.brightness == Brightness.dark
-        ? AppColors.darkMuted
-        : AppColors.lightMuted;
-    final isPreset = _presetTargets.contains(state.targetBytes);
+    final colors = Theme.of(context).colorScheme;
+    final selectedPreset = _presets.contains(state.targetBytes);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('تبدیل گروهی تصاویر'),
+        title: const Text('تبدیل گروهی'),
         actions: <Widget>[
           if (state.items.isNotEmpty && !state.isProcessing)
             IconButton(
               tooltip: 'پاک کردن فهرست',
-              onPressed: controller.clearSelection,
-              icon: const Icon(Icons.delete_sweep_outlined),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                controller.clearSelection();
+              },
+              icon: const Icon(Icons.delete_outline_rounded),
             ),
         ],
       ),
       body: SafeArea(
+        top: false,
+        bottom: false,
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: <Widget>[
-                _IntroPanel(
-                  count: state.totalCount,
-                  isProcessing: state.isProcessing,
-                ),
-                const SizedBox(height: 18),
-                _SectionHeading(
-                  title: 'حجم هدف خروجی',
-                  subtitle: 'حداکثر حجم هر فایل JPEG را تعیین کن.',
-                ),
-                const SizedBox(height: 11),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 9,
-                  textDirection: TextDirection.rtl,
-                  children: <Widget>[
-                    for (final target in _presetTargets)
-                      ChoiceChip(
-                        label: Text(_targetLabel(target)),
-                        selected: state.targetBytes == target,
-                        onSelected: state.isProcessing
-                            ? null
-                            : (_) => controller.setTargetBytes(target),
-                        showCheckmark: true,
-                      ),
-                    ChoiceChip(
-                      label: Text(
-                        isPreset ? 'دلخواه' : 'دلخواه · ${formatFileSize(state.targetBytes)}',
-                      ),
-                      selected: !isPreset,
-                      avatar: const Icon(Icons.tune_rounded, size: 17),
-                      onSelected: state.isProcessing
-                          ? null
-                          : (_) => _chooseCustomTarget(state.targetBytes),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 19),
-                _SectionHeading(
-                  title: 'انتخاب تصاویر',
-                  subtitle: 'فرمت‌های JPG، PNG، WebP، BMP و HEIC قابل بررسی هستند.',
-                ),
-                const SizedBox(height: 11),
-                _PickerPanel(
-                  count: state.totalCount,
-                  isPicking: state.isPicking,
-                  enabled: !state.isProcessing,
-                  onTap: controller.pickImages,
-                ),
-                if (state.errorMessage != null) ...<Widget>[
-                  const SizedBox(height: 12),
-                  _MessagePanel(message: state.errorMessage!),
-                ],
-                if (state.isProcessing) ...<Widget>[
-                  const SizedBox(height: 20),
-                  _ProgressPanel(
-                    progress: state.overallProgress,
-                    completed: state.completedCount,
-                    total: state.totalCount,
-                    isCancelling: state.isCancelling,
-                  ),
-                ],
-                if (state.items.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 20),
-                  Row(
-                    textDirection: TextDirection.rtl,
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          'فهرست فایل‌ها',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                      ),
-                      Text(
-                        '${toPersianDigits(state.totalCount.toString())} / ${toPersianDigits(AppConstants.maximumBatchSelection.toString())}',
-                        style: theme.textTheme.labelMedium?.copyWith(color: muted),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ...state.items.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 9),
-                      child: _QueueImageTile(
-                        item: item,
-                        enabled: !state.isProcessing,
-                        onRemove: () => controller.removeImage(item.id),
-                      ),
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Column(
+                children: <Widget>[
+                  SizedBox(
+                    height: 56,
+                    child: ListView.separated(
+                      key: const ValueKey<String>('target-presets'),
+                      padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 16, 5),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 5,
+                      separatorBuilder: (_, __) => const SizedBox(width: 7),
+                      itemBuilder: (context, index) {
+                        final isCustom = index == 4;
+                        final target = isCustom ? state.targetBytes : _presets[index];
+                        final selected = isCustom ? !selectedPreset : target == state.targetBytes;
+                        final title = isCustom
+                            ? (selected ? 'دلخواه: ${toPersianDigits((target / 1024).round().toString())}' : 'دلخواه')
+                            : target == 1024 * 1024
+                                ? '۱ مگابایت'
+                                : '${toPersianDigits((target / 1024).round().toString())} کیلوبایت';
+                        return _TargetChip(
+                          title: title,
+                          selected: selected,
+                          onTap: state.isProcessing
+                              ? null
+                              : () {
+                                  HapticFeedback.selectionClick();
+                                  if (isCustom) {
+                                    _setCustomTarget(state.targetBytes);
+                                  } else {
+                                    controller.setTargetBytes(target);
+                                  }
+                                },
+                        );
+                      },
                     ),
                   ),
-                ],
-                const SizedBox(height: 8),
-                Text(
-                  'پردازش تصاویر به‌صورت صف کنترل‌شده انجام می‌شود تا مصرف حافظه گوشی مدیریت شود.',
-                  textDirection: TextDirection.rtl,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                        color: muted,
-                        height: 1.8,
+                  if (state.errorMessage != null)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 2, 16, 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: colors.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                ),
-              ],
+                      child: Row(
+                        children: <Widget>[
+                          Icon(Icons.info_outline_rounded, size: 17, color: colors.onErrorContainer),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              state.errorMessage!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onErrorContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (state.isProcessing)
+                    _InlineProgress(state: state),
+                  Expanded(
+                    child: state.items.isEmpty
+                        ? _EmptyImagePicker(
+                            isPicking: state.isPicking,
+                            onPick: () {
+                              HapticFeedback.lightImpact();
+                              controller.pickImages();
+                            },
+                          )
+                        : _ImageQueue(
+                            state: state,
+                            onAdd: state.isProcessing || state.isPicking
+                                ? null
+                                : () {
+                                    HapticFeedback.lightImpact();
+                                    controller.pickImages();
+                                  },
+                            onRemove: controller.removeImage,
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-          child: SizedBox(
-            height: 56,
-            child: state.isProcessing
-                ? OutlinedButton.icon(
-                    onPressed: state.isCancelling ? null : controller.cancelBatch,
-                    icon: const Icon(Icons.stop_circle_outlined),
-                    label: Text(state.isCancelling ? 'در حال توقف صف…' : 'توقف پس از تصویر جاری'),
-                  )
-                : ElevatedButton.icon(
-                    onPressed: state.canStart ? _startProcessing : null,
-                    icon: const Icon(Icons.auto_awesome_rounded),
-                    label: Text(
-                      state.totalCount == 0
-                          ? 'ابتدا تصاویر را انتخاب کن'
-                          : 'شروع پردازش ${toPersianDigits(state.totalCount.toString())} تصویر',
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 688),
+            child: SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: state.isProcessing
+                  ? OutlinedButton.icon(
+                      onPressed: state.isCancelling ? null : controller.cancelBatch,
+                      icon: const Icon(Icons.stop_circle_outlined),
+                      label: Text(state.isCancelling ? 'در حال توقف...' : 'توقف صف پس از کارهای فعال'),
+                    )
+                  : FilledButton.icon(
+                      onPressed: state.canStart ? _run : null,
+                      icon: const Icon(Icons.bolt_rounded),
+                      label: Text(state.totalCount == 0
+                          ? 'ابتدا عکس انتخاب کنید'
+                          : 'شروع تبدیل ${toPersianDigits(state.totalCount.toString())} تصویر'),
                     ),
-                  ),
+            ),
           ),
         ),
       ),
     );
   }
-
-  String _targetLabel(int bytes) {
-    if (bytes == 1024 * 1024) return '۱ مگابایت';
-    return '${toPersianDigits((bytes / 1024).round().toString())} کیلوبایت';
-  }
 }
 
-class _IntroPanel extends StatelessWidget {
-  const _IntroPanel({required this.count, required this.isProcessing});
-
-  final int count;
-  final bool isProcessing;
+class _TargetChip extends StatelessWidget {
+  const _TargetChip({required this.title, required this.selected, required this.onTap});
+  final String title;
+  final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(19),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: <Color>[Color(0xFF286CF5), Color(0xFF1747B8)],
-        ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: AppColors.oceanBlue.withAlpha(42),
-            blurRadius: 20,
-            offset: const Offset(0, 9),
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: selected ? AppColors.oceanBlue : colors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? AppColors.oceanBlue : colors.outlineVariant),
           ),
-        ],
-      ),
-      child: Row(
-        textDirection: TextDirection.rtl,
-        children: <Widget>[
-          Container(
-            width: 55,
-            height: 55,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(24),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withAlpha(45)),
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: selected ? Colors.white : colors.onSurface,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
-            child: const Icon(Icons.collections_rounded, color: Colors.white, size: 29),
           ),
-          const SizedBox(width: 14),
-          Expanded(
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyImagePicker extends StatelessWidget {
+  const _EmptyImagePicker({required this.isPicking, required this.onPick});
+  final bool isPicking;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 9, 16, 10),
+      child: Material(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          key: const ValueKey<String>('open-gallery'),
+          onTap: isPicking ? null : onPick,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: colors.outlineVariant, width: 1.3),
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                const Text(
-                  'چند تصویر، یک خروجی استاندارد',
-                  textDirection: TextDirection.rtl,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
+                Container(
+                  width: 84,
+                  height: 84,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    borderRadius: BorderRadius.circular(26),
                   ),
+                  child: isPicking
+                      ? const Padding(padding: EdgeInsets.all(25), child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.add_photo_alternate_rounded, color: AppColors.oceanBlue, size: 39),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  isPicking ? 'در حال باز کردن گالری' : 'انتخاب عکس از گالری',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  isProcessing
-                      ? 'پردازش در حال انجام است.'
-                      : 'انتخاب گروهی تا ۵۰ تصویر با کنترل هوشمند حجم.',
-                  textDirection: TextDirection.rtl,
-                  style: TextStyle(
-                    color: Colors.white.withAlpha(220),
-                    fontSize: 11.5,
-                    height: 1.7,
-                  ),
+                  'حداکثر ۵۰ تصویر · JPG، PNG، WebP، HEIC، BMP',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(22),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Text(
-              '${toPersianDigits(count.toString())}/۵۰',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
+class _ImageQueue extends StatelessWidget {
+  const _ImageQueue({required this.state, required this.onAdd, required this.onRemove});
+  final BatchConversionState state;
+  final VoidCallback? onAdd;
+  final ValueChanged<String> onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkMuted
-        : AppColors.lightMuted;
+    final theme = Theme.of(context);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          title,
-          textDirection: TextDirection.rtl,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 7, 10, 4),
+          child: SizedBox(
+            height: 43,
+            child: Row(
+              children: <Widget>[
+                Text('فایل‌های انتخاب‌شده', style: theme.textTheme.titleSmall),
+                const SizedBox(width: 7),
+                Text(
+                  '${toPersianDigits(state.totalCount.toString())} / ${toPersianDigits(AppConstants.maximumBatchSelection.toString())}',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const Spacer(),
+                IconButton(
+                  key: const ValueKey<String>('add-more'),
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.oceanBlue),
+                  tooltip: 'افزودن بیشتر',
+                ),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 3),
-        Text(
-          subtitle,
-          textDirection: TextDirection.rtl,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted),
+        Expanded(
+          child: ListView.separated(
+            key: const ValueKey<String>('selected-image-list'),
+            padding: const EdgeInsets.fromLTRB(16, 3, 16, 12),
+            itemCount: state.items.length,
+            itemBuilder: (context, index) {
+              final item = state.items[index];
+              return _SelectedImageTile(
+                key: ValueKey<String>(item.id),
+                item: item,
+                canRemove: !state.isProcessing && !state.isPicking,
+                onRemove: () => onRemove(item.id),
+              );
+            },
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+          ),
         ),
       ],
     );
   }
 }
 
-class _PickerPanel extends StatelessWidget {
-  const _PickerPanel({
-    required this.count,
-    required this.isPicking,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final int count;
-  final bool isPicking;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(21),
-      child: InkWell(
-        onTap: enabled && !isPicking ? onTap : null,
-        borderRadius: BorderRadius.circular(21),
-        child: Container(
-          padding: const EdgeInsets.all(17),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(21),
-            border: Border.all(
-              color: theme.colorScheme.outlineVariant,
-              width: 1.2,
-            ),
-          ),
-          child: Row(
-            textDirection: TextDirection.rtl,
-            children: <Widget>[
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.oceanBlue.withAlpha(15),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: isPicking
-                    ? const Padding(
-                        padding: EdgeInsets.all(13),
-                        child: CircularProgressIndicator(strokeWidth: 2.2),
-                      )
-                    : const Icon(Icons.add_photo_alternate_rounded, color: AppColors.oceanBlue),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      isPicking ? 'در حال باز کردن گالری…' : 'انتخاب از گالری',
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      count == 0 ? 'برای انتخاب یک یا چند تصویر لمس کن.' : 'برای افزودن تصاویر بیشتر لمس کن.',
-                      textDirection: TextDirection.rtl,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_left_rounded),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProgressPanel extends StatelessWidget {
-  const _ProgressPanel({
-    required this.progress,
-    required this.completed,
-    required this.total,
-    required this.isCancelling,
-  });
-
-  final double progress;
-  final int completed;
-  final int total;
-  final bool isCancelling;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(21),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            textDirection: TextDirection.rtl,
-            children: <Widget>[
-              const Icon(Icons.sync_rounded, color: AppColors.oceanBlue),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  isCancelling ? 'در حال پایان دادن به صف…' : 'پردازش تصاویر',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-              Text(
-                '${toPersianDigits((progress * 100).round().toString())}٪',
-                style: theme.textTheme.titleSmall?.copyWith(
-                      color: AppColors.oceanBlue,
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 9,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            '${toPersianDigits(completed.toString())} از ${toPersianDigits(total.toString())} تصویر بررسی شد.',
-            textDirection: TextDirection.rtl,
-            style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QueueImageTile extends StatelessWidget {
-  const _QueueImageTile({
-    required this.item,
-    required this.enabled,
-    required this.onRemove,
-  });
-
+class _SelectedImageTile extends StatelessWidget {
+  const _SelectedImageTile({super.key, required this.item, required this.canRemove, required this.onRemove});
   final BatchImageItem item;
-  final bool enabled;
+  final bool canRemove;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final statusColor = switch (item.status) {
-      BatchImageStatus.selected => muted,
-      BatchImageStatus.processing => AppColors.oceanBlue,
-      BatchImageStatus.completed => const Color(0xFF16A36A),
-      BatchImageStatus.failed => theme.colorScheme.error,
-    };
-    final statusText = switch (item.status) {
-      BatchImageStatus.selected => 'آماده پردازش',
+    final colors = theme.colorScheme;
+    final status = switch (item.status) {
+      BatchImageStatus.selected => 'آماده تبدیل',
       BatchImageStatus.processing => item.stage,
-      BatchImageStatus.completed => 'تکمیل شد',
-      BatchImageStatus.failed => 'خطا در پردازش',
+      BatchImageStatus.completed => 'تبدیل شد',
+      BatchImageStatus.failed => 'خطا در این تصویر',
     };
-
     return Container(
-      padding: const EdgeInsets.all(11),
+      constraints: const BoxConstraints(minHeight: 77),
+      padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Row(
-        textDirection: TextDirection.rtl,
         children: <Widget>[
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(11),
             child: SizedBox(
-              width: 56,
-              height: 56,
+              width: 57,
+              height: 57,
               child: Image.file(
                 File(item.path),
-                fit: BoxFit.cover,
                 cacheWidth: 200,
-                cacheHeight: 120,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  child: const Icon(Icons.image_not_supported_outlined),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => ColoredBox(
+                  color: colors.surfaceContainerHighest,
+                  child: const Icon(Icons.broken_image_outlined),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Text(
                   item.originalName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textDirection: TextDirection.ltr,
-                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleSmall?.copyWith(fontSize: 12.5),
                 ),
-                const SizedBox(height: 5),
-                Row(
-                  textDirection: TextDirection.rtl,
-                  children: <Widget>[
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        statusText,
-                        textDirection: TextDirection.rtl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(color: statusColor),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 3),
+                Text(
+                  '${formatFileSize(item.sourceSizeBytes)}  ·  ${status}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: item.hasFailed ? colors.error : colors.onSurfaceVariant,
+                  ),
                 ),
-                if (item.status == BatchImageStatus.processing) ...<Widget>[
-                  const SizedBox(height: 7),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: LinearProgressIndicator(
-                      value: item.progress,
-                      minHeight: 4,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                    ),
+                if (item.status == BatchImageStatus.processing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: LinearProgressIndicator(value: item.progress, minHeight: 3),
                   ),
-                ] else if (item.outputSizeBytes != null) ...<Widget>[
-                  const SizedBox(height: 3),
-                  Text(
-                    '${formatFileSize(item.sourceSizeBytes)}  ←  ${formatFileSize(item.outputSizeBytes!)}',
-                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
-                  ),
-                ] else ...<Widget>[
-                  const SizedBox(height: 3),
-                  Text(
-                    formatFileSize(item.sourceSizeBytes),
-                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
-                  ),
-                ],
               ],
             ),
           ),
-          if (enabled)
+          if (canRemove)
             IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'حذف از فهرست',
+              tooltip: 'حذف تصویر',
               onPressed: onRemove,
-              icon: Icon(Icons.close_rounded, color: muted, size: 20),
+              icon: const Icon(Icons.close_rounded, size: 19),
+              color: colors.onSurfaceVariant,
             )
-          else if (item.status == BatchImageStatus.completed)
-            const Icon(Icons.check_circle_rounded, color: Color(0xFF16A36A)),
+          else
+            const SizedBox(width: 10),
         ],
       ),
     );
   }
 }
 
-class _MessagePanel extends StatelessWidget {
-  const _MessagePanel({required this.message});
-
-  final String message;
+class _InlineProgress extends StatelessWidget {
+  const _InlineProgress({required this.state});
+  final BatchConversionState state;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer.withAlpha(120),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        textDirection: TextDirection.rtl,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: Column(
         children: <Widget>[
-          Icon(Icons.info_outline_rounded, color: theme.colorScheme.error),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              message,
-              textDirection: TextDirection.rtl,
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CustomTargetDialog extends StatefulWidget {
-  const _CustomTargetDialog({required this.currentBytes});
-
-  final int currentBytes;
-
-  @override
-  State<_CustomTargetDialog> createState() => _CustomTargetDialogState();
-}
-
-class _CustomTargetDialogState extends State<_CustomTargetDialog> {
-  late final TextEditingController _controller;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(
-      text: (widget.currentBytes / 1024).round().toString(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final value = int.tryParse(normalizeDigits(_controller.text.trim()));
-    if (value == null || value < 10 || value > 20480) {
-      setState(() => _error = 'مقدار باید بین ۱۰ تا ۲۰۴۸۰ کیلوبایت باشد.');
-      return;
-    }
-    HapticFeedback.selectionClick();
-    Navigator.of(context).pop(value * 1024);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('حجم دلخواه'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('حداکثر حجم خروجی را برحسب کیلوبایت وارد کن.'),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            textDirection: TextDirection.ltr,
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9۰-۹٠-٩]')),
+          Row(
+            children: <Widget>[
+              Text('در حال تبدیل', style: theme.textTheme.labelMedium),
+              const Spacer(),
+              Text(
+                '${toPersianDigits(state.completedCount.toString())} / ${toPersianDigits(state.totalCount.toString())} · ${toPersianDigits((state.overallProgress * 100).round().toString())}٪',
+                style: theme.textTheme.labelSmall,
+              ),
             ],
-            decoration: InputDecoration(
-              labelText: 'حجم برحسب KB',
-              errorText: _error,
-              suffixText: 'KB',
-            ),
-            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: state.overallProgress,
+            minHeight: 5,
+            borderRadius: BorderRadius.circular(8),
           ),
         ],
       ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('انصراف'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('ثبت حجم'),
-        ),
-      ],
     );
   }
 }

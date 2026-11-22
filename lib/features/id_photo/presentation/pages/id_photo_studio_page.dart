@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -36,6 +37,7 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
 
   Future<void> _captureFromCamera() async {
     if (_busy) return;
+    HapticFeedback.lightImpact();
     final path = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(builder: (_) => const IdPhotoCameraPage()),
     );
@@ -44,11 +46,9 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
 
   Future<void> _pickFromGallery() async {
     if (_busy) return;
+    HapticFeedback.lightImpact();
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 100,
-      );
+      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 100);
       if (picked != null && mounted) await _runWorkflow(picked.path);
     } catch (error) {
       if (mounted) _showMessage('انتخاب تصویر ناموفق بود: $error', isError: true);
@@ -62,42 +62,31 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
       _progress = 0;
       _stage = 'آماده‌سازی تصویر';
     });
-
     final temporaryPaths = <String>{};
     try {
-      final preparedPath = await ref
-          .read(idPhotoImagePreparationServiceProvider)
-          .prepareForCrop(originalPath);
+      final preparedPath = await ref.read(idPhotoImagePreparationServiceProvider).prepareForCrop(originalPath);
       if (preparedPath != originalPath) temporaryPaths.add(preparedPath);
       if (!mounted) return;
 
       final rotatedPath = await Navigator.of(context).push<String>(
-        MaterialPageRoute<String>(
-          builder: (_) => IdPhotoRotationPage(sourcePath: preparedPath),
-        ),
+        MaterialPageRoute<String>(builder: (_) => IdPhotoRotationPage(sourcePath: preparedPath)),
       );
       if (rotatedPath == null || !mounted) return;
-      if (rotatedPath != preparedPath && rotatedPath != originalPath) {
-        temporaryPaths.add(rotatedPath);
-      }
+      if (rotatedPath != preparedPath && rotatedPath != originalPath) temporaryPaths.add(rotatedPath);
 
       final croppedPath = await Navigator.of(context).push<String>(
-        MaterialPageRoute<String>(
-          builder: (_) => IdPhotoCropPage(sourcePath: rotatedPath),
-        ),
+        MaterialPageRoute<String>(builder: (_) => IdPhotoCropPage(sourcePath: rotatedPath)),
       );
       if (croppedPath == null || !mounted) return;
       if (croppedPath != originalPath && croppedPath != preparedPath && croppedPath != rotatedPath) {
         temporaryPaths.add(croppedPath);
       }
-
       setState(() {
         _progress = 0.03;
         _stage = 'ساخت خروجی ۳×۴';
       });
 
-      final processingService = ref.read(imageProcessingServiceProvider);
-      final result = await processingService.createIdPhotoJpeg(
+      final result = await ref.read(imageProcessingServiceProvider).createIdPhotoJpeg(
         inputPath: croppedPath,
         options: IdPhotoOptions(targetBytes: _targetBytes),
         onProgress: (ImageProcessingProgress progress) {
@@ -108,7 +97,6 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
           });
         },
       );
-
       final jfifDpi = JpegDpiMetadata.readJfifDpi(result.bytes);
       if (result.width != AppConstants.idPhotoWidthPx ||
           result.height != AppConstants.idPhotoHeightPx ||
@@ -117,17 +105,14 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
         throw StateError('اعتبارسنجی ابعاد یا متادیتای ۳۰۰ DPI خروجی ناموفق بود.');
       }
 
-      final supportDirectory = await getApplicationSupportDirectory();
-      final outputDirectory = Directory(
-        '${supportDirectory.path}${Platform.pathSeparator}pixelsaz_pro'
+      final support = await getApplicationSupportDirectory();
+      final directory = Directory(
+        '${support.path}${Platform.pathSeparator}pixelsaz_pro'
         '${Platform.pathSeparator}id_photo_exports',
       );
-      await outputDirectory.create(recursive: true);
-      final outputFile = File(
-        '${outputDirectory.path}${Platform.pathSeparator}${_uuid.v4()}.jpg',
-      );
+      await directory.create(recursive: true);
+      final outputFile = File('${directory.path}${Platform.pathSeparator}${_uuid.v4()}.jpg');
       await outputFile.writeAsBytes(result.bytes, flush: true);
-
       final originalFile = File(originalPath);
       final originalSize = await originalFile.exists() ? await originalFile.length() : result.originalSizeBytes;
       final item = BatchImageItem(
@@ -147,12 +132,9 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
         targetReached: result.targetReached,
         sourceFormat: result.sourceFormat,
       );
-
       if (!mounted) return;
       await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => IdPhotoResultPage(item: item, processingResult: result),
-        ),
+        MaterialPageRoute<void>(builder: (_) => IdPhotoResultPage(item: item, processingResult: result)),
       );
     } catch (error) {
       if (mounted) _showMessage(_readableError(error), isError: true);
@@ -162,7 +144,7 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
           final file = File(path);
           if (await file.exists()) await file.delete();
         } catch (_) {
-          // Temporary cleanup must not hide a successful export.
+          // Cleanup must not invalidate a successfully generated output.
         }
       }
       if (mounted) {
@@ -183,8 +165,10 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
       case 'converting_heic':
         return 'در حال تبدیل فرمت تصویر';
       case 'preparing_id_photo':
+      case 'native_preparing':
         return 'تنظیم ابعاد عکس پرسنلی';
       case 'compressing_id_photo':
+      case 'compressing':
         return 'بهینه‌سازی کیفیت و حجم';
       case 'complete':
         return 'آماده‌سازی کامل شد';
@@ -203,144 +187,71 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
   void _showMessage(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message, textDirection: TextDirection.rtl),
-          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        ),
-      );
+      ..showSnackBar(SnackBar(
+        content: Text(message, textDirection: TextDirection.rtl),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+      ));
+  }
+
+  void _setTarget(int? value) {
+    if (_busy) return;
+    HapticFeedback.selectionClick();
+    setState(() => _targetBytes = value);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Scaffold(
-      appBar: AppBar(title: const Text('استودیوی عکس پرسنلی')),
+      appBar: AppBar(title: const Text('استودیو عکس پرسنلی')),
       body: Stack(
         children: <Widget>[
           SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.all(19),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text('PHOTO STUDIO  ·  3:4',
-                              style: TextStyle(color: AppColors.violet,
-                                fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: .8)),
-                            const SizedBox(height: 7),
-                            Text('عکس پرسنلی، با دقت چاپ',
-                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 5),
-                            Text('عکس عمودی را بدون چرخش ناخواسته کادربندی کن؛ اندازه و کیفیت خروجی را خودت انتخاب کن.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant, height: 1.7)),
-                          ],
-                        ),
+            top: false,
+            bottom: false,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: LayoutBuilder(
+                builder: (context, size) {
+                  final short = size.maxHeight < 470;
+                  final textLarge = MediaQuery.textScalerOf(context).scale(14) > 19;
+                  final content = _StudioSettings(
+                    targetBytes: _targetBytes,
+                    onSetTarget: _setTarget,
+                    enabled: !_busy,
+                    compact: short || textLarge,
+                  );
+                  if (size.maxHeight < 390 || textLarge) {
+                    return SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: size.maxHeight),
+                        child: content,
                       ),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 72, height: 91,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(17),
-                          gradient: const LinearGradient(
-                            colors: <Color>[Color(0xFFE5E8FF), Color(0xFFC9E7FA)],
-                          ),
-                        ),
-                        child: const Icon(Icons.portrait_rounded,
-                          size: 43, color: AppColors.violet),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Text('مشخصات خروجی', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 10),
-                Row(
-                  children: <Widget>[
-                    Expanded(child: _SpecCard(icon: Icons.aspect_ratio_rounded, title: '۳۵۴ × ۴۷۲', subtitle: 'پیکسل')),
-                    const SizedBox(width: 10),
-                    Expanded(child: _SpecCard(icon: Icons.print_rounded, title: '300 DPI', subtitle: 'تراکم چاپ')),
-                    const SizedBox(width: 10),
-                    Expanded(child: _SpecCard(icon: Icons.photo_size_select_actual_outlined, title: '۳ × ۴', subtitle: 'سانتی‌متر اسمی')),
-                  ],
-                ),
-                const SizedBox(height: 22),
-                Text('حجم خروجی را انتخاب کنید', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 10),
-                _TargetOption(
-                  title: 'کیفیت حداکثری چاپ',
-                  subtitle: 'بدون محدودیت حجم؛ مناسب چاپ با کیفیت بالا',
-                  selected: _targetBytes == null,
-                  onTap: _busy ? null : () => setState(() => _targetBytes = null),
-                ),
-                const SizedBox(height: 8),
-                _TargetOption(
-                  title: 'حداکثر ۲۰۰ کیبی‌بایت',
-                  subtitle: 'مناسب سامانه‌هایی با محدودیت حجم پایین',
-                  selected: _targetBytes == 200 * 1024,
-                  onTap: _busy ? null : () => setState(() => _targetBytes = 200 * 1024),
-                ),
-                const SizedBox(height: 8),
-                _TargetOption(
-                  title: 'حداکثر ۴۹۵ کیبی‌بایت',
-                  subtitle: 'حالت پیشنهادی برای استفاده عمومی',
-                  selected: _targetBytes == 495 * 1024,
-                  onTap: _busy ? null : () => setState(() => _targetBytes = 495 * 1024),
-                ),
-                const SizedBox(height: 22),
-                ElevatedButton.icon(
-                  onPressed: _busy ? null : _captureFromCamera,
-                  icon: const Icon(Icons.camera_alt_rounded),
-                  label: const Text('گرفتن عکس با دوربین'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _pickFromGallery,
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('انتخاب عکس از گالری'),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'نکته: خروجی ۳۵۴×۴۷۲ با متادیتای JFIF و EXIF روی ۳۰۰ DPI تنظیم می‌شود. پذیرش عکس توسط سامانه‌ها به الزامات همان سامانه نیز بستگی دارد.',
-                  textAlign: TextAlign.justify,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.8,
-                  ),
-                ),
-              ],
+                    );
+                  }
+                  return content;
+                },
+              ),
             ),
           ),
           if (_busy)
             Positioned.fill(
               child: ColoredBox(
-                color: Colors.black.withAlpha(115),
+                color: Colors.black.withAlpha(120),
                 child: Center(
                   child: Container(
-                    width: 300,
+                    width: 290,
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(22),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         const CircularProgressIndicator(),
-                        const SizedBox(height: 18),
-                        Text(_stage, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 14),
+                        Text(_stage, style: theme.textTheme.titleSmall),
                         const SizedBox(height: 12),
                         LinearProgressIndicator(value: _progress == 0 ? null : _progress),
                         const SizedBox(height: 8),
@@ -353,81 +264,252 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
             ),
         ],
       ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 688),
+            child: SizedBox(
+              height: 54,
+              child: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      flex: 6,
+                      child: FilledButton.icon(
+                        key: const ValueKey<String>('id-camera'),
+                        onPressed: _busy ? null : _captureFromCamera,
+                        icon: const Icon(Icons.camera_alt_rounded),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('گرفتن عکس با دوربین', maxLines: 1),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      flex: 5,
+                      child: OutlinedButton.icon(
+                        key: const ValueKey<String>('id-gallery'),
+                        onPressed: _busy ? null : _pickFromGallery,
+                        icon: const Icon(Icons.photo_library_outlined, size: 19),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('انتخاب از گالری', maxLines: 1),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _SpecCard extends StatelessWidget {
-  const _SpecCard({required this.icon, required this.title, required this.subtitle});
+class _StudioSettings extends StatelessWidget {
+  const _StudioSettings({
+    required this.targetBytes,
+    required this.onSetTarget,
+    required this.enabled,
+    required this.compact,
+  });
+
+  final int? targetBytes;
+  final ValueChanged<int?> onSetTarget;
+  final bool enabled;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 9, 16, 9),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Container(
+                key: const ValueKey<String>('id-spec-pill'),
+                height: 43,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  border: Border.all(color: AppColors.oceanBlue.withAlpha(35)),
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const Icon(Icons.verified_outlined, color: AppColors.oceanBlue, size: 17),
+                      const SizedBox(width: 7),
+                      Text(
+                        '۳×۴ سانتی‌متر   •   ۳۵۴×۴۷۲ پیکسل   •   300 DPI',
+                        maxLines: 1,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colors.onPrimaryContainer,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 17),
+              Text(
+                'حجم و کیفیت خروجی',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 9),
+              _QualityTile(
+                key: const ValueKey<String>('quality-print'),
+                icon: Icons.print_outlined,
+                title: 'کیفیت حداکثری چاپ',
+                subtitle: 'بدون محدودیت حجم',
+                selected: targetBytes == null,
+                enabled: enabled,
+                onTap: () => onSetTarget(null),
+              ),
+              const SizedBox(height: 8),
+              _QualityTile(
+                key: const ValueKey<String>('quality-200'),
+                icon: Icons.speed_rounded,
+                title: 'زیر ۲۰۰ کیلوبایت',
+                subtitle: 'مناسب سامانه‌های کم‌حجم',
+                selected: targetBytes == 200 * 1024,
+                enabled: enabled,
+                onTap: () => onSetTarget(200 * 1024),
+              ),
+              const SizedBox(height: 8),
+              _QualityTile(
+                key: const ValueKey<String>('quality-495'),
+                icon: Icons.high_quality_outlined,
+                title: 'زیر ۴۹۵ کیلوبایت',
+                subtitle: 'پیشنهادی برای استفاده عمومی',
+                selected: targetBytes == 495 * 1024,
+                enabled: enabled,
+                onTap: () => onSetTarget(495 * 1024),
+              ),
+              if (!compact) ...<Widget>[
+                const SizedBox(height: 12),
+                const Expanded(child: _FramingGuide()),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QualityTile extends StatelessWidget {
+  const _QualityTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
+    final colors = theme.colorScheme;
+    return Material(
+      color: selected ? colors.primaryContainer : colors.surface,
+      borderRadius: BorderRadius.circular(17),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(17),
-      ),
-      child: Column(
-        children: <Widget>[
-          Icon(icon, color: AppColors.violet, size: 21),
-          const SizedBox(height: 7),
-          Text(title, textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 3),
-          Text(subtitle, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        ],
+        child: Container(
+          height: 67,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: selected ? AppColors.oceanBlue : colors.outlineVariant),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, color: selected ? AppColors.oceanBlue : colors.onSurfaceVariant, size: 23),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              Icon(
+                selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                size: 21,
+                color: selected ? AppColors.oceanBlue : colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _TargetOption extends StatelessWidget {
-  const _TargetOption({
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback? onTap;
+class _FramingGuide extends StatelessWidget {
+  const _FramingGuide();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: selected ? theme.colorScheme.primaryContainer.withAlpha(150) : theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(17),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(17),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
+    final colors = Theme.of(context).colorScheme;
+    return Center(
+      child: AspectRatio(
+        aspectRatio: 3 / 4,
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Stack(
+            alignment: Alignment.center,
             children: <Widget>[
-              Icon(selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    Text(title, textDirection: TextDirection.rtl,
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 3),
-                    Text(subtitle, textDirection: TextDirection.rtl,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                  ],
+              Positioned.fill(child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: colors.surfaceContainerLow,
                 ),
-              ),
+              )),
+              Icon(Icons.person_outline_rounded, color: AppColors.violet.withAlpha(100), size: 63),
+              Positioned.fill(child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.violet.withAlpha(65), width: 1.2),
+                ),
+              )),
             ],
           ),
         ),
