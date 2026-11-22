@@ -17,6 +17,7 @@ class IdPhotoRotationPage extends ConsumerStatefulWidget {
 
 class _IdPhotoRotationPageState extends ConsumerState<IdPhotoRotationPage> {
   double _angle = 0;
+  int _quarterTurns = 0;
   bool _applying = false;
 
   Future<void> _applyRotation() async {
@@ -25,7 +26,7 @@ class _IdPhotoRotationPageState extends ConsumerState<IdPhotoRotationPage> {
     try {
       final outputPath = await ref.read(idPhotoRotationServiceProvider).rotateFile(
             sourcePath: widget.sourcePath,
-            angleDegrees: _angle,
+            angleDegrees: _angle + (_quarterTurns * 90),
           );
       if (!mounted) return;
       Navigator.of(context).pop<String>(outputPath);
@@ -50,7 +51,7 @@ class _IdPhotoRotationPageState extends ConsumerState<IdPhotoRotationPage> {
           child: Column(
             children: <Widget>[
               Text(
-                'برای صاف‌شدن خط چشم و شانه‌ها، زاویه تصویر را به‌آرامی تنظیم کنید.',
+                'عکس عمودی باید عمودی بماند. در صورت نیاز از چرخش ۹۰ درجه یا تنظیم جزئی زاویه استفاده کنید.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -67,7 +68,7 @@ class _IdPhotoRotationPageState extends ConsumerState<IdPhotoRotationPage> {
                       color: theme.colorScheme.surfaceContainerHighest,
                       padding: const EdgeInsets.all(12),
                       child: Transform.rotate(
-                        angle: _angle * math.pi / 180,
+                        angle: (_angle + _quarterTurns * 90) * math.pi / 180,
                         child: Image.file(
                           File(widget.sourcePath),
                           fit: BoxFit.contain,
@@ -80,7 +81,24 @@ class _IdPhotoRotationPageState extends ConsumerState<IdPhotoRotationPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
+              Wrap(
+                spacing: 8,
+                alignment: WrapAlignment.center,
+                children: <Widget>[
+                  OutlinedButton.icon(
+                    onPressed: _applying ? null : () => setState(() => _quarterTurns = (_quarterTurns + 3) % 4),
+                    icon: const Icon(Icons.rotate_left_rounded),
+                    label: const Text('چرخش ۹۰° چپ'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _applying ? null : () => setState(() => _quarterTurns = (_quarterTurns + 1) % 4),
+                    icon: const Icon(Icons.rotate_right_rounded),
+                    label: const Text('چرخش ۹۰° راست'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: <Widget>[
                   const Icon(Icons.rotate_left_rounded),
@@ -103,7 +121,7 @@ class _IdPhotoRotationPageState extends ConsumerState<IdPhotoRotationPage> {
                       style: theme.textTheme.labelLarge),
                   const Spacer(),
                   TextButton.icon(
-                    onPressed: _applying ? null : () => setState(() => _angle = 0),
+                    onPressed: _applying ? null : () => setState(() { _angle = 0; _quarterTurns = 0; }),
                     icon: const Icon(Icons.restart_alt_rounded),
                     label: const Text('بازنشانی'),
                   ),

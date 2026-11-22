@@ -10,8 +10,9 @@ import '../../../../core/image_processing/data/datasources/heic_conversion_data_
 import '../../../../core/image_processing/data/datasources/image_format_detector.dart';
 
 /// Normalizes formats that native cropper libraries may not decode uniformly.
-/// JPEG files are passed through unchanged; HEIF uses the native converter;
-/// PNG, WebP and BMP are converted to a high-quality JPEG in a worker isolate.
+/// All formats, including JPEG, are converted into upright RGB pixels.
+/// EXIF rotation is baked once and stripped before native cropping, because
+/// Android crop plugins do not interpret every camera orientation consistently.
 class IdPhotoImagePreparationService {
   IdPhotoImagePreparationService({HeicConversionDataSource? heicConverter})
       : _heicConverter = heicConverter ?? HeicConversionDataSource();
@@ -39,13 +40,14 @@ class IdPhotoImagePreparationService {
       throw FormatException('فرمت تصویر برای عکس پرسنلی پشتیبانی نمی‌شود: $format');
     }
 
-    if (format == 'jpeg') return sourcePath;
-
     final Uint8List jpegBytes;
     if (ImageFormatDetector.isHeif(format)) {
-      jpegBytes = await _heicConverter.convertToJpeg(sourcePath);
+      final converted = await _heicConverter.convertToJpeg(sourcePath);
+      jpegBytes = await Isolate.run<Uint8List>(
+        () => normalizeIdPhotoBytes(converted),
+      );
     } else {
-      jpegBytes = await Isolate.run<Uint8List>(() => _normalizeImageBytes(bytes));
+      jpegBytes = await Isolate.run<Uint8List>(() => normalizeIdPhotoBytes(bytes));
     }
 
     final temporaryDirectory = await getTemporaryDirectory();
@@ -62,13 +64,16 @@ class IdPhotoImagePreparationService {
   }
 }
 
-Uint8List _normalizeImageBytes(Uint8List bytes) {
+/// Pure, independently testable EXIF-orientation normalization.
+Uint8List normalizeIdPhotoBytes(Uint8List bytes) {
   img.Decoder.defaultMaxPixels = 40000000;
   final decoded = img.decodeImage(bytes, frame: 0);
   if (decoded == null) {
     throw const FormatException('رمزگشایی تصویر انتخاب‌شده امکان‌پذیر نیست.');
   }
 
+  // Phone portrait JPEGs commonly contain landscape pixel arrays and EXIF=6/8.
+  // Bake EXIF so uCrop never incorrectly opens a portrait in landscape.
   final oriented = img.bakeOrientation(decoded);
   final background = img.Image(
     width: oriented.width,

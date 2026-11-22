@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
@@ -72,6 +73,7 @@ class _IdPhotoCameraPageState extends State<IdPhotoCameraPage>
         enableAudio: false,
       );
       await nextController.initialize();
+      await nextController.lockCaptureOrientation(DeviceOrientation.portraitUp);
       final minZoom = await nextController.getMinZoomLevel();
       final maxZoom = await nextController.getMaxZoomLevel();
       await nextController.setFlashMode(FlashMode.off);
@@ -225,7 +227,7 @@ class _IdPhotoCameraPageState extends State<IdPhotoCameraPage>
                         fit: StackFit.expand,
                         children: <Widget>[
                           if (cameraReady)
-                            CameraPreview(controller)
+                            CameraPreview(controller!)
                           else
                             Container(
                               color: const Color(0xFF151D2D),

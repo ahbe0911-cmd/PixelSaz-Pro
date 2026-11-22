@@ -56,6 +56,9 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
+      - name: Generate branded Android launcher icons
+        run: dart run tool/generate_launcher_icons.dart
+
       - name: Run static analyzer
         run: flutter analyze --no-fatal-infos
 

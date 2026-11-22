@@ -6,11 +6,11 @@ abstract final class AppColors {
   static const Color violet = Color(0xFF8057E8);
   static const Color aqua = Color(0xFF26BFC2);
 
-  static const Color lightBackground = Color(0xFFF4F6FB);
+  static const Color lightBackground = Color(0xFFF7F8FB);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightText = Color(0xFF182238);
+  static const Color lightText = Color(0xFF182239);
   static const Color lightMuted = Color(0xFF748099);
-  static const Color lightOutline = Color(0xFFE5E9F2);
+  static const Color lightOutline = Color(0xFFE8EBF1);
 
   static const Color darkBackground = Color(0xFF0B1020);
   static const Color darkSurface = Color(0xFF151D31);

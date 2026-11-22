@@ -54,8 +54,8 @@ abstract final class AppTheme {
         centerTitle: false,
         titleTextStyle: GoogleFonts.vazirmatn(
           color: foreground,
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -70,15 +70,15 @@ abstract final class AppTheme {
           fontSize: 14,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(17),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(17),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(17),
           borderSide: const BorderSide(
             color: AppColors.oceanBlue,
             width: 1.5,
@@ -92,7 +92,7 @@ abstract final class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(17),
           ),
           textStyle: GoogleFonts.vazirmatn(
             fontSize: 15,
@@ -106,7 +106,7 @@ abstract final class AppTheme {
           foregroundColor: foreground,
           side: BorderSide(color: outline),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(17),
           ),
           textStyle: GoogleFonts.vazirmatn(
             fontSize: 14,

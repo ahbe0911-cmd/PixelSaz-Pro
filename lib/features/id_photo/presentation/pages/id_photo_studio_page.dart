@@ -224,29 +224,43 @@ class _IdPhotoStudioPageState extends ConsumerState<IdPhotoStudioPage> {
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
               children: <Widget>[
                 Container(
-                  padding: const EdgeInsets.all(22),
+                  padding: const EdgeInsets.all(19),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(26),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topRight,
-                      end: Alignment.bottomLeft,
-                      colors: <Color>[Color(0xFF8759E8), Color(0xFF4A36A8), Color(0xFF202C66)],
-                    ),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(color: const Color(0xFF6D4ACB).withAlpha(55), blurRadius: 24, offset: const Offset(0, 12)),
-                    ],
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  child: Row(
                     children: <Widget>[
-                      Icon(Icons.badge_rounded, color: Colors.white, size: 38),
-                      SizedBox(height: 18),
-                      Text('عکس پرسنلی استاندارد ۳×۴', textDirection: TextDirection.rtl,
-                          style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900)),
-                      SizedBox(height: 8),
-                      Text('کادربندی دقیق، اصلاح زاویه و خروجی مناسب چاپ و سامانه‌ها.',
-                          textDirection: TextDirection.rtl,
-                          style: TextStyle(color: Colors.white70, height: 1.8)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text('PHOTO STUDIO  ·  3:4',
+                              style: TextStyle(color: AppColors.violet,
+                                fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: .8)),
+                            const SizedBox(height: 7),
+                            Text('عکس پرسنلی، با دقت چاپ',
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 5),
+                            Text('عکس عمودی را بدون چرخش ناخواسته کادربندی کن؛ اندازه و کیفیت خروجی را خودت انتخاب کن.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant, height: 1.7)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 72, height: 91,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(17),
+                          gradient: const LinearGradient(
+                            colors: <Color>[Color(0xFFE5E8FF), Color(0xFFC9E7FA)],
+                          ),
+                        ),
+                        child: const Icon(Icons.portrait_rounded,
+                          size: 43, color: AppColors.violet),
+                      ),
                     ],
                   ),
                 ),
