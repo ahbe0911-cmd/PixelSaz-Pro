@@ -33,9 +33,7 @@ dependencies:
   gal: ^3.0.1
   share_plus: ^13.3.1
   permission_handler: ^13.0.2
-
-  # UI visual redesign is scheduled for phase 2; local fonts are ready now.
-  google_fonts: ^8.2.1
+  # Design system assets are bundled locally during the build.
   flutter_svg: ^2.5.0
   flutter_animate: ^4.5.2
   intl: ^0.20.3
