@@ -565,7 +565,7 @@ class _ResultImageCardState extends State<_ResultImageCard> {
                       : Image.file(
                           File(outputPath),
                           fit: BoxFit.cover,
-                          cacheWidth: 160,
+                          cacheWidth: 200,
                           cacheHeight: 160,
                           errorBuilder: (context, error, stackTrace) => Container(
                             color: theme.colorScheme.surfaceContainerHighest,
